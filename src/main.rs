@@ -1,8 +1,29 @@
 #[macro_use]
 extern crate glium;
-extern crate image;
 
+use image;
+
+use std::fs::File;
 use std::io::Cursor;
+
+use serde::{Deserialize, Serialize};
+use serde_json::Result;
+
+#[derive(Serialize, Deserialize)]
+pub struct AssetSprite {
+    pub width: u32,
+    pub height: u32,
+    pub x: u32,
+    pub y: u32,
+    pub extra_rows: u32,
+}
+
+#[derive(Deserialize)]
+pub struct AssetSpriteCollection {
+    pub width: u32,
+    pub height: u32,
+    pub tiles: Vec<AssetSprite>,
+}
 
 fn main() {
     use glium::uniforms::{MagnifySamplerFilter, MinifySamplerFilter};
@@ -22,35 +43,70 @@ fn main() {
 
     implement_vertex!(Vertex, position, tex_coords);
 
-    const X_DIM: u32 = 3;
+    const X_DIM: u32 = 6;
     const Y_DIM: u32 = 3;
 
+    let meta_file = File::open("assets/Roads1a.json").unwrap();
+    let sprite_collection: AssetSpriteCollection = serde_json::from_reader(meta_file).unwrap();
+
     let mut indices_raw_data: Vec<u32> = Vec::new();
-    indices_raw_data.reserve((X_DIM as usize) * (Y_DIM as usize) * 6);
+    //    indices_raw_data.reserve((X_DIM as usize) * (Y_DIM as usize) * 6);
+    //    let mut shape_raw_data = Vec::new();
+    //    shape_raw_data.reserve((X_DIM as usize) * (Y_DIM as usize) * 4);
+    indices_raw_data.reserve(sprite_collection.tiles.len() * 6);
     let mut shape_raw_data = Vec::new();
-    shape_raw_data.reserve((X_DIM as usize) * (Y_DIM as usize) * 4);
-    for y in 0..Y_DIM {
-        let y_offset = y as f32 * 15.0;
-        for x in 0..X_DIM {
-            let x_offset = x as f32 * 58.0 + if y % 2 == 0 { 0.0 } else { 29.0 };
-            shape_raw_data.push(Vertex {position: (x_offset + 0.0, y_offset + 0.0, 1.0), tex_coords: (0.0, 1.0)});
-            shape_raw_data.push(Vertex {position: (x_offset + 58.0, y_offset + 0.0, 1.0), tex_coords: (1.0, 1.0)});
-            shape_raw_data.push(Vertex {position: (x_offset + 0.0, y_offset + 30.0, 0.0), tex_coords: (0.0, 0.0)});
-            shape_raw_data.push(Vertex {position: (x_offset + 58.0, y_offset + 30.0, 0.0), tex_coords: (1.0, 0.0)});
-            let indices_offset = (y * X_DIM + x) * 4;
-            indices_raw_data.push(indices_offset + 0);
-            indices_raw_data.push(indices_offset + 1);
-            indices_raw_data.push(indices_offset + 2);
-            indices_raw_data.push(indices_offset + 2);
-            indices_raw_data.push(indices_offset + 1);
-            indices_raw_data.push(indices_offset + 3);
-        }
+    shape_raw_data.reserve(sprite_collection.tiles.len() * 4);
+
+    println!(
+        "sprite_collection.tiles[39].width: {}",
+        sprite_collection.tiles[39].width
+    );
+    println!(
+        "sprite_collection.tiles[39].height: {}",
+        sprite_collection.tiles[39].height
+    );
+    println!(
+        "sprite_collection.tiles[39].extra_rows: {}",
+        sprite_collection.tiles[39].extra_rows
+    );
+    for (i, sprite) in sprite_collection.tiles.iter().enumerate() {
+        let y: u32 = (i as u32) / X_DIM;
+        let y_offset = (y as f32 * 15.0) - sprite.extra_rows as f32;
+
+        let x = i as u32 % X_DIM;
+        let x_offset = x as f32 * 58.0 + if y % 2 == 0 { 0.0 } else { 29.0 };
+
+        let bottom = (sprite.y as f32 + sprite.height as f32) / sprite_collection.height as f32;
+        let top = sprite.y as f32 / sprite_collection.height as f32;
+        let left = sprite.x as f32 / sprite_collection.width as f32;
+        let right = (sprite.x as f32 + sprite.width as f32) / sprite_collection.width as f32;
+
+        shape_raw_data.push(Vertex {
+            position: (x_offset, y_offset, 1.0),
+            tex_coords: (left, top),
+        });
+        shape_raw_data.push(Vertex {
+            position: (x_offset + 58.0, y_offset, 1.0),
+            tex_coords: (right, top),
+        });
+        shape_raw_data.push(Vertex {
+            position: (x_offset, y_offset + sprite.height as f32, 0.0),
+            tex_coords: (left, bottom),
+        });
+        shape_raw_data.push(Vertex {
+            position: (x_offset + 58.0, y_offset + sprite.height as f32, 0.0),
+            tex_coords: (right, bottom),
+        });
+        let indices_offset = i as u32 * 4;
+        indices_raw_data.push(indices_offset + 0);
+        indices_raw_data.push(indices_offset + 1);
+        indices_raw_data.push(indices_offset + 2);
+        indices_raw_data.push(indices_offset + 2);
+        indices_raw_data.push(indices_offset + 1);
+        indices_raw_data.push(indices_offset + 3);
     }
 
-    let shape = glium::vertex::VertexBuffer::new(
-        &display,
-        &shape_raw_data
-    ).unwrap();
+    let shape = glium::vertex::VertexBuffer::new(&display, &shape_raw_data).unwrap();
 
     let indices = glium::IndexBuffer::new(
         &display,
@@ -58,8 +114,8 @@ fn main() {
         &indices_raw_data,
     )
     .unwrap();
-//    let indices = glium::IndexBuffer::new(&display, glium::index::PrimitiveType::TrianglesList,
-//                                          &teapot::INDICES).unwrap();
+    //    let indices = glium::IndexBuffer::new(&display, glium::index::PrimitiveType::TrianglesList,
+    //                                          &teapot::INDICES).unwrap();
 
     let image = image::load(
         Cursor::new(&include_bytes!("../assets/Roads1a.png")[..]),
@@ -68,7 +124,8 @@ fn main() {
     .unwrap()
     .to_rgba();
     let image_dimensions = image.dimensions();
-    let image = glium::texture::RawImage2d::from_raw_rgba_reversed(&image.into_raw(), image_dimensions);
+    let image =
+        glium::texture::RawImage2d::from_raw_rgba(image.into_raw(), image_dimensions);
     let diffuse_texture = glium::texture::SrgbTexture2d::new(&display, image).unwrap();
 
     let vertex_shader_src = r#"
@@ -130,14 +187,14 @@ fn main() {
 
         // let view = view_matrix(&[0.5, 0.2, -3.0], &[-0.5, -0.2, 3.0], &[0.0, 1.0, 0.0]);
         let view = [
-            [10.0, 0.0, 0.0, 0.0],
-            [0.0, 10.0, 0.0, 0.0],
-            [0.0, 0.0, 10.0, 0.0],
+            [5.0, 0.0, 0.0, 0.0],
+            [0.0, 5.0, 0.0, 0.0],
+            [0.0, 0.0, 5.0, 0.0],
             [0.0, 0.0, 0.0, 1.0f32],
         ];
 
         let mut target = display.draw();
-        target.clear_color_and_depth((0.7, 0.7, 0.7, 1.0), 1.0);
+        target.clear_color_and_depth((0.3, 0.3, 0.3, 1.0), 1.0);
 
         let model = [
             [1.0, 0.0, 0.0, 0.0],

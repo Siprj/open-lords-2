@@ -1,5 +1,5 @@
 [package]
-name = "openLords2"
+name = "open_lords2"
 version = "0.1.0"
 authors = ["Jan Sipr <sipr.jan@gmail.com>"]
 edition = "2018"
@@ -9,3 +9,5 @@ edition = "2018"
 [dependencies]
 glium = "0.26.0-alpha6"
 image = "*"
+serde_json = "1.0.46"
+serde = { version = "1.0.104", features = ["derive"] }
